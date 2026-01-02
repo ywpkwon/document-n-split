@@ -111,19 +111,38 @@ Optional flags:
 
 ---
 
-## Example: Input Markdown (placeholder)
+## Example: Input Markdown and its Parsing Result (Diagram Visualization)
 
-_Insert example markdown here._
+Input [markdown document](./examples/example_structure.md)
 
-~~~markdown
-<!-- TODO: add example markdown -->
+Parsing result:
+
+~~~text
+Detected mode: markdown
+Num atoms: 66
+Num sections: 15
+ idx  type           lines       bytes            words  chars dep cut  bnd  sid pid          path                            preview
+--------------------------------------------------------------------------------------------------------------------------------------------
+   0  heading        0-0         0-31                 5     31   1   1 1.00    1 1            Project Atlas: Strategy Memo    # Project Atlas: Strategy Memo
+   1  blank          1-1         31-32                0      1   0   0 0.00    1 1            Project Atlas: Strategy Memo
+   2  paragraph      2-3         32-182              22    150   0   0 0.10    1 1            Project Atlas: Strategy Memo    A short, nicely structured sam…
+   3  blank          4-4         182-183              0      1   0   0 0.00    1 1            Project Atlas: Strategy Memo
+   4  hr             5-5         183-187              1      4   0   1 0.90    1 1            Project Atlas: Strategy Memo    ---
+   5  blank          6-6         187-188              0      1   0   0 0.00    1 1            Project Atlas: Strategy Memo
+   6  heading        7-7         188-212              4     24   2   1 1.00    2 1/2          Project Atlas: Strategy Mem…    ## 1. Executive Summary
+   7  blank          8-8         212-213              0      1   0   0 0.00    2 1/2          Project Atlas: Strategy Mem…
+   8  paragraph      9-9         213-280             11     67   0   0 0.10    2 1/2          Project Atlas: Strategy Mem…    **What this is:** A compact me…
+   9  blank          10-10       280-281              0      1   0   0 0.00    2 1/2          Project Atlas: Strategy Mem…
+  10  pseudo_heading 11-11       281-295              2     14   3   1 0.95    3 1/2/3        Project Atlas: Strategy Mem…    **Key goals**
+  11  list           12-14       295-394             20     99   0   1 0.50    3 1/2/3        Project Atlas: Strategy Mem…    - Ship a reliable v1 by Q2 - K…
+  12  blank          15-15       394-395              0      1   0   0 0.00    3 1/2/3        Project Atlas: Strategy Mem…
+  13  heading        16-16       395-419              4     24   3   1 1.00    4 1/2/4        Project Atlas: Strategy Mem…    ### 1.1 Success Metrics
+  14  blank          17-17       419-420              0      1   0   0 0.00    4 1/2/4        Project Atlas: Strategy Mem…
+  15  paragraph      18-18       420-447              5     27   0   0 0.10    4 1/2/4        Project Atlas: Strategy Mem…    We will track success via:
+...
 ~~~
 
----
-
-## Example: Mermaid Diagram (placeholder)
-
-_Insert generated Mermaid diagram here._
+Visualization of parsing result:
 
 ~~~mermaid
 flowchart TD
