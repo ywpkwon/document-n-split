@@ -11,9 +11,9 @@ def _preview(text: str, n: int = 50) -> str:
 
 def print_atoms(atoms, max_preview=50):
     print(
-        f"{'idx':>4}  {'type':<14} {'lines':<11} {'bytes':<15} "
+        f"{'idx':>4}  {'type':<14} {'lines':<11} {'bytes':<12} "
         f"{'words':>6} {'chars':>6} {'dep':>3} {'cut':>3} {'bnd':>4} "
-        f"{'sid':>4} {'pid':<12} {'path':<30}  preview"
+        f"{'sid':>4} {'pid':<12}  preview"
     )
     print("-" * 140)
 
@@ -22,14 +22,14 @@ def print_atoms(atoms, max_preview=50):
         bytes_ = f"{a.start_byte}-{a.end_byte}"
         sid = a.section_node_id if a.section_node_id is not None else "-"
         pid = "/".join(map(str, a.section_path_ids)) if a.section_path_ids else "-"
-        path = "/".join(a.section_path) if a.section_path else "-"
-        if len(path) > 30:
-            path = path[:27] + "…"
+        # path = "/".join(a.section_path) if a.section_path else "-"
+        # if len(path) > 30:
+        #     path = path[:27] + "…"
 
         print(
-            f"{a.idx:>4}  {a.atom_type.value:<14} {lines:<11} {bytes_:<15} "
+            f"{a.idx:>4}  {a.atom_type.value:<14} {lines:<11} {bytes_:<12} "
             f"{a.weight_words:>6} {a.weight_chars:>6} {a.depth:>3} {int(a.can_cut_before):>3} "
-            f"{a.boundary_strength:>4.2f} {str(sid):>4} {pid:<12} {path:<30}  {_preview(a.text, max_preview)}"
+            f"{a.boundary_strength:>4.2f} {str(sid):>4} {pid:<12}  {_preview(a.text, max_preview)}"
         )
 
 
