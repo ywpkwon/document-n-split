@@ -4,14 +4,6 @@ A lightweight Python tool to **parse documents into atomic units**, infer a
 **pseudo-hierarchical structure**, and enable **structure-aware partitioning**
 (e.g. dividing a document into *N* balanced sections without touching content or order).
 
-This project is designed as a foundation for:
-
-- document chunking for LLM pipelines
-- section-aware summarization
-- balanced context-window packing
-- structural visualization (Mermaid)
-- future algorithmic (non-LLM) partitioning
-
 ---
 
 ## Motivation
@@ -142,7 +134,7 @@ Num sections: 15
 ...
 ~~~
 
-Visualization of parsing result:
+Visualization of parsing result (Mermaid)
 
 ~~~mermaid
 flowchart TD
