@@ -1,260 +1,193 @@
-# Document Atomizer & Section-Aware Chunking
+# Deterministic Document Segmentation via Atomic Parsing
 
-A lightweight Python tool to **parse documents into atomic units**, infer a
-**pseudo-hierarchical structure**, and enable **structure-aware partitioning**
-(e.g. dividing a document into *N* balanced sections without touching content or order).
+This project explores **how to divide a long document into N coherent sections** in a **deterministic, inspectable, and extensible way**, without relying on LLMs to “understand” or rewrite the content.
+
+Rather than treating the problem as text generation, we treat it as **structured document analysis**.
 
 ---
 
 ## Motivation
 
-Given:
-- a document (Markdown or plain text)
-- an integer **N**
+Splitting documents sounds simple, but in practice it is ambiguous:
 
-We want to:
-- divide the document into **N contiguous sections**
-- preserve **content and order exactly**
-- respect **semantic structure** (headings, pseudo-headings, lists, code blocks)
-- avoid brittle heuristics or blind token splitting
+- Where *should* a document be split?
+- Should headings always dominate?
+- What about lists, tables, or long paragraphs?
+- How do we debug or adjust a bad split?
 
-Instead of forcing a rigid tree upfront, this project:
-- keeps a **linear atom stream**
-- annotates atoms with **pseudo-tree metadata**
-- reconstructs structure *only when needed*
+### Key design decisions
 
----
+#### 1. No LLMs for segmentation
+This system **does not generate or modify content**.  
+It only **divides** existing content.
 
-## Core Concepts
+Because of that, we intentionally avoid LLM-based heuristics and instead use:
 
-### Atom
+- Deterministic parsing
+- Explicit rules
+- Reproducible outcomes
 
-An **atom** is the smallest indivisible unit allowed for splitting:
+This makes the system:
+- predictable
+- debuggable
+- suitable for automation pipelines
+
+#### 2. Atom-first representation
+Instead of directly “splitting a document,” we first parse it into **atomic units**:
 
 - headings
+- pseudo-headings (e.g. `**Title**`)
 - paragraphs
 - list blocks
 - tables
-- code fences
+- code blocks
 - horizontal rules
-- blank lines
+- blanks
 
-Atoms are never split internally.
+Each atom carries metadata:
+- position (line, byte, index)
+- word/character counts
+- loose hierarchical context
+- boundary strength (how good a cut this atom represents)
+
+This **atom layer** is the core abstraction.
+
+#### 3. Loose structure, not a rigid tree
+Documents are not always well-formed trees.
+
+We therefore model:
+- a *pseudo-tree* using heading depth and section paths
+- without enforcing strict parent/child constraints
+
+This allows:
+- flat documents (e.g. novels)
+- semi-structured memos
+- messy markdown
+- mixed formats
+
+All future logic (splitting, visualization, tuning) operates on atoms.
+
+#### 4. Visualization as a first-class tool
+Understanding segmentation decisions is hard without seeing structure.
+
+We therefore add:
+- Mermaid-based section diagrams
+- optional leaf-level visualization (paragraphs, lists, code, tables)
+- segment coloring for split results
+
+Visualization serves two purposes:
+- **debugging** (why did this split happen?)
+- **future interaction** (manual tweaking, UI-based adjustment)
 
 ---
 
-### Pseudo-Tree Metadata
+## High-level pipeline
 
-Each atom is annotated with:
-
-- `section_node_id` — stable identifier of the section it belongs to
-- `section_path_ids` — ancestry chain (implicit tree path)
-- `section_path` — human-readable titles
-- `depth` — structural depth (Markdown level or inferred)
-- `can_cut_before` — whether a cut before this atom is allowed
-- `boundary_strength` — heuristic importance of the boundary
-
-This gives **tree-like reasoning power without building a tree**.
+~~~
+Raw document
+   ↓
+Atomization (deterministic)
+   ↓
+Atoms + pseudo-structure
+   ↓
+Candidate cut generation
+   ↓
+N-way partitioning (by word balance)
+   ↓
+Optional visualization
+~~~
 
 ---
 
-## Project Structure
+## Atomization
 
-~~~text
-.
-├── atomizer.py           # Core atomization logic
-├── render.py             # Mermaid diagram rendering
-├── run_atomizer.py       # CLI runner
-├── README.md
-└── examples/
-    ├── sample_structure.md
-    └── sample_structure.mmd
+The parser detects document mode (Markdown vs plain text) and emits a **linear sequence of atoms**.
+
+Each atom includes:
+- `atom_type` (heading, paragraph, list, …)
+- `weight_words`, `weight_chars`
+- `depth` (for headings / pseudo-headings)
+- `section_path_ids`
+- `can_cut_before` + `boundary_strength`
+
+This representation is intentionally **over-complete** to support future policies.
+
+> Think of atoms as “document pixels”: small, immutable, and composable.
+
+---
+
+## Splitting into N sections
+
+Splitting is framed as:
+
+> Choose **N−1 cut points** from valid boundaries to balance total word count.
+
+### Candidate cuts
+Candidates are selected from atoms that are:
+- strong boundaries (headings, pseudo-headings, HRs)
+- optionally lists / tables / code blocks
+- optionally paragraphs (fallback)
+
+Relaxation happens in stages if strict candidates cannot produce N segments.
+
+### Objective
+The default objective minimizes deviation from equal word counts across segments, while respecting boundary preferences.
+
+This makes the behavior:
+- explainable
+- tunable
+- extensible
+
+---
+
+## Visualization (Mermaid)
+
+The system can emit a **Mermaid flowchart** showing:
+
+- section hierarchy (from headings)
+- optional leaf nodes (paragraphs, lists, code, tables)
+- coloring by split segment
+
+This is especially useful when tuning split parameters or validating parser behavior.
+
+### Example (section-level)
+
+~~~mermaid
+flowchart TD
+    S1["Introduction"]
+    S2["Background"]
+    S3["Method"]
+    S1 --> S2
+    S2 --> S3
 ~~~
 
 ---
 
 ## Usage
 
-### Run atomizer on a Markdown file
-
-~~~bash
-python run_atomizer.py --file sample.md
+### Parse and inspect atoms
+~~~
+python main.py --file input.md
 ~~~
 
-This prints a table of atoms with structural metadata.
-
----
-
-### Export a Mermaid section diagram
-
-~~~bash
-python run_atomizer.py \
-  --file sample.md \
-  --mermaid-out outline.mmd
+### Split into N sections
+~~~
+python main.py --file input.md --split 5
 ~~~
 
-Optional flags:
-
-~~~text
---mermaid-no-pseudo     exclude pseudo-headings
---mermaid-stats         include rough section stats
---mermaid-dir LR        layout direction (TD, LR, RL, BT)
+### Export Mermaid diagram
+~~~
+python main.py --file input.md \
+  --split 5 \
+  --mermaid-out structure.md \
+  --mermaid-leaves
 ~~~
 
 ---
 
-## Example: Input Markdown and its Parsing Result (Diagram Visualization)
+## Summary
 
-Input [markdown document](./examples/example_structure.md)
-
-Parsing result:
-
-~~~text
-Detected mode: markdown
-Num atoms: 66
-Num sections: 15
- idx  type           lines      bytes     words  chars dep cut  bnd   pid      preview
---------------------------------------------------------------------------------------------------------------
-   0  heading        0-0        0-31          5     31   1   1 1.00   1        # Project Atlas: Strategy Memo
-   1  blank          1-1        31-32         0      1   0   0 0.00   1
-   2  paragraph      2-3        32-182       22    150   0   0 0.10   1        A short, nicely structured sam…
-   3  blank          4-4        182-183       0      1   0   0 0.00   1
-   4  hr             5-5        183-187       1      4   0   1 0.90   1        ---
-   5  blank          6-6        187-188       0      1   0   0 0.00   1
-   6  heading        7-7        188-212       4     24   2   1 1.00   1/2      ## 1. Executive Summary
-   7  blank          8-8        212-213       0      1   0   0 0.00   1/2
-   8  paragraph      9-9        213-280      11     67   0   0 0.10   1/2      **What this is:** A compact me…
-   9  blank          10-10      280-281       0      1   0   0 0.00   1/2
-  10  pseudo_heading 11-11      281-295       2     14   3   1 0.95   1/2/3    **Key goals**
-  11  list           12-14      295-394      20     99   0   1 0.50   1/2/3    - Ship a reliable v1 by Q2 - K…
-  12  blank          15-15      394-395       0      1   0   0 0.00   1/2/3
-  13  heading        16-16      395-419       4     24   3   1 1.00   1/2/4    ### 1.1 Success Metrics
-  14  blank          17-17      419-420       0      1   0   0 0.00   1/2/4
-  15  paragraph      18-18      420-447       5     27   0   0 0.10   1/2/4    We will track success via:
-  16  blank          19-19      447-448       0      1   0   0 0.00   1/2/4
-  17  list           20-23      448-583      23    135   0   1 0.50   1/2/4    - Activation rate (first meani…
-...
-~~~
-
-Visualization of parsing result (Mermaid)
-
-~~~mermaid
-flowchart TD
-    S1["Project Atlas: Strategy Memo (atoms 0-65, words=376)"]
-    S2["1. Executive Summary (atoms 6-24, words=91)"]
-    S3["Key goals (atoms 10-12, words=22)"]
-    S4["1.1 Success Metrics (atoms 13-18, words=32)"]
-    S5["1.2 Non-Goals (atoms 19-24, words=22)"]
-    S6["2. Background & Problem (atoms 25-39, words=85)"]
-    S7["2.1 Constraints (atoms 30-33, words=26)"]
-    S8["2.2 Assumptions (atoms 34-39, words=33)"]
-    S9["3. Proposed Solution (atoms 40-65, words=172)"]
-    S10["3.1 Architecture (atoms 45-58, words=99)"]
-    S11["High-level components (atoms 47-49, words=20)"]
-    S12["3.1.1 Data Flow (atoms 50-53, words=35)"]
-    S13["3.1.2 Storage Schema (atoms 54-58, words=41)"]
-    S14["3.2 API Sketch (atoms 59-62, words=12)"]
-    S15["3.3 Pseudocode (atoms 63-65, words=28)"]
-    S1 --> S2
-    S1 --> S6
-    S1 --> S9
-    S2 --> S3
-    S2 --> S4
-    S2 --> S5
-    S6 --> S7
-    S6 --> S8
-    S9 --> S10
-    S9 --> S14
-    S9 --> S15
-    S10 --> S11
-    S10 --> S12
-    S10 --> S13
-~~~
-
----
-
-## Mermaid Visualization
-
-The tool can render the inferred section hierarchy as a Mermaid diagram:
-
-- stable section IDs
-- parent–child relationships
-- optional pseudo-heading inclusion
-- optional section span statistics
-
-Useful for:
-- debugging structure inference
-- UI outline previews
-- explaining chunking decisions
-- document navigation
-
----
-
-## Roadmap / TODO
-
-### Atomization (done)
-
-- [x] Markdown heading detection
-- [x] Pseudo-heading detection (`**Title**`, ALL CAPS)
-- [x] List / table / code-fence grouping
-- [x] Stable section IDs
-- [x] Section registry (`node_id → atom_idx`)
-- [x] Sanity invariants
-
----
-
-### Structure & Analysis (done)
-
-- [x] Implicit pseudo-tree via `section_path_ids`
-- [x] Parent section lookup
-- [x] Mermaid rendering
-
----
-
-### 🚧 Partitioning (next)
-
-**Goal:**  
-Divide the atom stream into **N contiguous chunks** by choosing **N−1 boundaries**, without modifying content.
-
-Planned work:
-
-- [ ] Define candidate cut positions (`can_cut_before == True`)
-- [ ] Assign per-atom cost (chars / words / tokens)
-- [ ] Implement balanced partitioning objective  
-  - minimize max chunk size
-  - penalize cuts inside strong sections
-- [ ] Prefer higher `boundary_strength`
-- [ ] Graceful fallback when N is large
-- [ ] Deterministic, non-LLM baseline algorithm
-
----
-
-### Optional Extensions
-
-- [ ] Token-based weights (via tokenizer)
-- [ ] Sentence-level fallback atoms
-- [ ] Section span precomputation
-- [ ] JSON export for downstream pipelines
-- [ ] LLM-assisted refinement (optional layer)
-
----
-
-## Design Philosophy
-
-- **Content is immutable**
-- **Structure is inferred, not enforced**
-- **Linear first, tree later**
-- **Algorithms before prompts**
-- **LLMs are optional, not required**
-
----
-
-## Status
-
-This project currently provides:
-- a robust atomization pipeline
-- implicit structural reasoning
-- Mermaid-based visualization
-
-The **N-partitioning algorithm** is the next major milestone.
-
+- Document segmentation is ambiguous — so we made it explicit.
+- We avoid LLMs where generation is unnecessary.
+- We parse once, then reason over atoms.
+- Visualization is not an afterthought; it’s part of the design.
