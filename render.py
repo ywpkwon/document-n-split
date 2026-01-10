@@ -1,6 +1,16 @@
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Optional, Dict, Iterable, List, Optional, Set, Tuple
 from atomizer import Atom, AtomType
+from bisect import bisect_right
+
+
+def _segment_of_atom_idx(def_idx: int, cuts: List[int]) -> int:
+    """
+    cuts are start indices for segments 2..N (sorted).
+    returns segment index in [0..N-1]
+    """
+    # Example: cuts [10, 30] => ranges [0,10), [10,30), [30, M)
+    return bisect_right(cuts, def_idx)
 
 
 def _escape_mermaid_label(s: str) -> str:
@@ -29,6 +39,7 @@ def render_mermaid(
     section_registry: Dict[int, int],
     *,
     opts: Optional[MermaidOptions] = None,
+    cuts: Optional[List[int]] = None,
 ) -> str:
     """
     Render a Mermaid flowchart showing the section hierarchy implied by:
@@ -117,28 +128,52 @@ def render_mermaid(
     def _section_span_atom_indices(node_id: int) -> Optional[Tuple[int, int]]:
         return section_span_cache.get(node_id)
 
+    node_to_seg: Dict[int, int] = {}
+    if cuts is not None:
+        for node_id, atom_idx in node_atom.items():
+            if atom_idx < 0:
+                continue
+            node_to_seg[node_id] = _segment_of_atom_idx(atom_idx, cuts)
+
     # Render Mermaid
     lines: List[str] = []
     lines.append("```mermaid")
     lines.append(f"flowchart {opts.direction}")
 
-    # Emit nodes
-    def node_key(nid: int) -> str:
-        return f"S{nid}" if nid != 0 else "ROOT"
+    # Nodes grouped into subgraphs
+    if cuts is not None:
+        # group nodes by segment
+        seg_to_nodes: Dict[int, List[int]] = {}
+        for nid in sorted(included_nodes):
+            if nid == 0:
+                continue
+            seg = node_to_seg.get(nid, 0)
+            seg_to_nodes.setdefault(seg, []).append(nid)
 
-    for nid in sorted(included_nodes):
-        if nid == 0:
-            lines.append(f'    {node_key(nid)}["ROOT"]')
-            continue
-        atom_idx = node_atom.get(nid)
-        if atom_idx is None:
-            continue
-        lbl = label_for_node(nid, atom_idx)
-        lines.append(f'    {node_key(nid)}["{lbl}"]')
+        for seg_idx in sorted(seg_to_nodes):
+            lines.append(f'    subgraph SEC{seg_idx+1}["Section {seg_idx+1}"]')
+            for nid in seg_to_nodes[seg_idx]:
+                atom_idx = node_atom[nid]
+                lbl = label_for_node(nid, atom_idx)
+                lines.append(f'        S{nid}["{lbl}"]')
+            lines.append("    end")
+    else:
+        # original flat node emission
+        for nid in sorted(included_nodes):
+            if nid == 0:
+                lines.append('    ROOT["ROOT"]')
+                continue
+            atom_idx = node_atom.get(nid)
+            if atom_idx is None:
+                continue
+            lbl = label_for_node(nid, atom_idx)
+            lines.append(f'    S{nid}["{lbl}"]')
 
     # Emit edges
     for p, c in sorted(edges):
-        lines.append(f"    {node_key(p)} --> {node_key(c)}")
+        pkey = f"S{p}" if p != 0 else "ROOT"
+        ckey = f"S{c}" if c != 0 else "ROOT"
+        lines.append(f"    {pkey} --> {ckey}")
 
     lines.append("```")
     return "\n".join(lines)
