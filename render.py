@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from atomizer import Atom, AtomType
 from bisect import bisect_right
 
@@ -93,21 +93,15 @@ def render_mermaid(
 
     for node_id, atom_idx in node_atom.items():
         pid = atoms[atom_idx].section_path_ids
-        # pid ends with node_id; parent is pid[-2] if exists
         parent_id = pid[-2] if len(pid) >= 2 else None
         parent_map[node_id] = parent_id
-        if parent_id is not None:
-            # Only add edge if parent is also included (or if we want to force-root parent nodes)
-            if parent_id in included_nodes:
-                edges.add((parent_id, node_id))
+        if parent_id is not None and parent_id in included_nodes:
+            edges.add((parent_id, node_id))
 
     # Optionally include missing parents to keep the tree connected (best effort)
     if opts.include_root:
-        # Make a synthetic ROOT and connect top-level nodes to it.
         ROOT_ID = 0
         included_nodes.add(ROOT_ID)
-
-        # Create a pseudo atom label for ROOT
         node_atom[ROOT_ID] = -1  # sentinel
         for node_id, parent_id in parent_map.items():
             if node_id == ROOT_ID:
@@ -118,9 +112,6 @@ def render_mermaid(
     # Precompute section spans if requested
     section_span_cache: Dict[int, Tuple[int, int]] = {}
     if opts.include_section_stats:
-        # We'll derive spans from section_node_id membership across atoms.
-        # Span is from defining atom_idx to right before the next atom that is outside this node's subtree.
-        # For now, a simple conservative span: [defining_idx, last_idx where section_path_ids contains node_id]
         membership: Dict[int, List[int]] = {nid: [] for nid in included_nodes if nid != 0}
         for k, a in enumerate(atoms):
             for nid in a.section_path_ids:
@@ -133,24 +124,25 @@ def render_mermaid(
     def _section_span_atom_indices(node_id: int) -> Optional[Tuple[int, int]]:
         return section_span_cache.get(node_id)
 
-    node_to_seg: Dict[int, int] = {}
-    if cuts is not None:
-        for node_id, atom_idx in node_atom.items():
-            if atom_idx < 0:
-                continue
-            node_to_seg[node_id] = _segment_of_atom_idx(atom_idx, cuts)
+    # Helper: attach leaves to nearest included section node
+    def _attach_section_id(a: Atom) -> Optional[int]:
+        if a.section_node_id is not None and a.section_node_id in included_nodes:
+            return a.section_node_id
+        for sid in reversed(a.section_path_ids):
+            if sid in included_nodes:
+                return sid
+        return None
 
     # Render Mermaid
     lines: List[str] = []
     lines.append("```mermaid")
 
-    # Optional layout tuning (some renderers honor this init block)
     if cuts is not None:
         lines.append('%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28}} }%%')
 
     lines.append(f"flowchart {opts.direction}")
 
-    # Emit nodes (always flat; no subgraphs)
+    # Emit section nodes (always flat)
     for nid in sorted(included_nodes):
         if nid == 0:
             lines.append('    ROOT["ROOT"]')
@@ -161,9 +153,8 @@ def render_mermaid(
         lbl = label_for_node(nid, atom_idx)
         lines.append(f'    S{nid}["{lbl}"]')
 
-    # Optional: emit leaf atoms (paragraph/list/code/table) under their local section node
+    # Optional: emit leaf atoms (paragraph/list/code/table) under nearest included section node
     if opts.include_leaves:
-        # Map user-facing strings -> AtomType
         name_to_type = {
             "paragraph": AtomType.PARAGRAPH,
             "list": AtomType.LIST_BLOCK,
@@ -172,39 +163,38 @@ def render_mermaid(
             "table": AtomType.TABLE,
         }
 
-        leaf_atom_types = set()
+        leaf_atom_types: Set[AtomType] = set()
         for tname in opts.leaf_types:
             at = name_to_type.get(tname.strip().lower())
             if at is not None:
                 leaf_atom_types.add(at)
 
-        empty_leaf_atom_types = set()
+        empty_leaf_atom_types: Set[AtomType] = set()
         for tname in opts.empty_leaf_types:
             at = name_to_type.get(tname.strip().lower())
             if at is not None:
                 empty_leaf_atom_types.add(at)
 
-        # Collect leaves under their *local* section (leaf.section_node_id)
         leaves_by_section: Dict[int, List[int]] = {}
         for a in atoms:
-            if a.atom_type not in leaf_atom_types:
-                continue
-            if a.section_node_id is None:
-                continue
-            # Only attach leaves to section nodes that exist in this diagram
-            if a.section_node_id not in included_nodes:
-                continue
-            # Skip blanks always
             if a.atom_type == AtomType.BLANK:
                 continue
-            leaves_by_section.setdefault(a.section_node_id, []).append(a.idx)
+            if a.atom_type not in leaf_atom_types:
+                continue
+            sid = _attach_section_id(a)
+            if sid is None:
+                continue
+            leaves_by_section.setdefault(sid, []).append(a.idx)
 
-        # Leaf styles: empty boxes for paragraph/list
-        lines.append("classDef leafEmpty fill:#ffffff,stroke:#999,stroke-width:1px,color:#999;")
-        lines.append("classDef leafLabeled fill:#ffffff,stroke:#666,stroke-width:1px,color:#111;")
+        # Leaf styles: keep them subtle and small
+        lines.append(
+            "classDef leafEmpty fill:#ffffff,stroke:#999,stroke-width:1px,color:#999;"
+        )
+        lines.append(
+            "classDef leafLabeled fill:#ffffff,stroke:#666,stroke-width:1px,color:#111;"
+        )
 
         for sid, atom_indices in leaves_by_section.items():
-            # cap number of leaves per section
             atom_indices = atom_indices[: opts.max_leaves_per_section]
 
             for ai in atom_indices:
@@ -212,16 +202,19 @@ def render_mermaid(
                 leaf_id = f"A{ai}"
 
                 if a.atom_type in empty_leaf_atom_types:
-                    # empty box
+                    # Many renderers treat [""] as invisible; use a small dot
                     lines.append(f'    {leaf_id}["·"]')
                     lines.append(f"    S{sid} --> {leaf_id}")
                     lines.append(f"    class {leaf_id} leafEmpty;")
                 else:
-                    # short label for code/table (avoid width explosion)
                     if a.atom_type == AtomType.CODE_FENCE:
-                        lbl = "code"
+                        lbl = "C"
                     elif a.atom_type == AtomType.TABLE:
-                        lbl = "table"
+                        lbl = "T"
+                    elif a.atom_type == AtomType.PARAGRAPH:
+                        lbl = "P"
+                    elif a.atom_type == AtomType.LIST_BLOCK:
+                        lbl = "L"
                     else:
                         lbl = a.atom_type.value
 
@@ -229,7 +222,6 @@ def render_mermaid(
                     lines.append(f"    S{sid} --> {leaf_id}")
                     lines.append(f"    class {leaf_id} leafLabeled;")
 
-            # If truncated, show overflow marker
             total = len(leaves_by_section[sid])
             if total > opts.max_leaves_per_section:
                 more_id = f"A{sid}_MORE"
@@ -237,15 +229,14 @@ def render_mermaid(
                 lines.append(f"    S{sid} --> {more_id}")
                 lines.append(f"    class {more_id} leafLabeled;")
 
-    # Emit edges
+    # Emit section-to-section edges
     for p, c in sorted(edges):
         pkey = f"S{p}" if p != 0 else "ROOT"
         ckey = f"S{c}" if c != 0 else "ROOT"
         lines.append(f"    {pkey} --> {ckey}")
 
-    # If cuts exist, color nodes by segment
+    # If cuts exist, color SECTION nodes by segment (leaves remain neutral)
     if cuts is not None:
-        # Compute segment index per node (0-based)
         node_to_seg: Dict[int, int] = {}
         for nid, atom_idx in node_atom.items():
             if nid == 0 or atom_idx < 0:
@@ -254,8 +245,6 @@ def render_mermaid(
 
         n_segs = len(cuts) + 1
 
-        # A small palette of pleasant colors (background, stroke, text)
-        # If n_segs > palette size, we cycle.
         palette = [
             ("#E3F2FD", "#1E88E5", "#0D47A1"),  # blue
             ("#E8F5E9", "#43A047", "#1B5E20"),  # green
@@ -267,14 +256,12 @@ def render_mermaid(
             ("#EFEBE9", "#6D4C41", "#3E2723"),  # brown
         ]
 
-        # Define class styles
         for s in range(n_segs):
             fill, stroke, text = palette[s % len(palette)]
             lines.append(
                 f"classDef sec{s+1} fill:{fill},stroke:{stroke},stroke-width:1px,color:{text};"
             )
 
-        # Assign nodes to classes
         seg_to_nodes: Dict[int, List[int]] = {}
         for nid in sorted(included_nodes):
             if nid == 0:
@@ -283,10 +270,8 @@ def render_mermaid(
             seg_to_nodes.setdefault(seg, []).append(nid)
 
         for seg, nids in sorted(seg_to_nodes.items()):
-            # Mermaid 'class' statement can take a comma-separated list
             joined = ",".join(f"S{nid}" for nid in nids)
             lines.append(f"class {joined} sec{seg+1};")
 
     lines.append("```")
     return "\n".join(lines)
-

@@ -164,7 +164,8 @@ def main():
             include_section_stats=args.mermaid_stats,
             include_leaves=args.mermaid_leaves,
             max_leaves_per_section=args.mermaid_max_leaves_per_section,
-            leaf_types=args.mermaid_leaf_types,
+            leaf_types=tuple(x.strip() for x in args.mermaid_leaf_types.split(",")),
+            empty_leaf_types=(),
         )
         mm = render_mermaid(atoms, section_registry, opts=opts, cuts=res.cuts if res else None)
         Path(args.mermaid_out).write_text(mm, encoding="utf-8")
