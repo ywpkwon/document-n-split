@@ -60,6 +60,9 @@ def main():
     ap.add_argument("--mermaid-dir", type=str, default="TD", help="Mermaid direction: TD, LR, RL, BT.")
     ap.add_argument("--mermaid-no-pseudo", action="store_true", help="Exclude pseudo headings from diagram.")
     ap.add_argument("--mermaid-stats", action="store_true", help="Include rough section stats in node labels.")
+    ap.add_argument("--mermaid-leaves", action="store_true")
+    ap.add_argument("--mermaid-max-leaves-per-section", type=int, default=10)
+    ap.add_argument("--mermaid-leaf-types", type=str, default="paragraph,list,code,table")
     # spit
     ap.add_argument("--split", type=int, default=None, help="Split into N sections (choose N-1 cut boundaries).")
     ap.add_argument("--split-relax", action="store_true",
@@ -89,8 +92,6 @@ def main():
 
     if not args.no_print:
         print_atoms(atoms, max_preview=args.max_preview)
-
-
 
     res = None
     if args.split is not None:
@@ -161,6 +162,9 @@ def main():
             direction=args.mermaid_dir,
             include_pseudo_headings=(not args.mermaid_no_pseudo),
             include_section_stats=args.mermaid_stats,
+            include_leaves=args.mermaid_leaves,
+            max_leaves_per_section=args.mermaid_max_leaves_per_section,
+            leaf_types=args.mermaid_leaf_types,
         )
         mm = render_mermaid(atoms, section_registry, opts=opts, cuts=res.cuts if res else None)
         Path(args.mermaid_out).write_text(mm, encoding="utf-8")

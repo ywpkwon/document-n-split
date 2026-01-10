@@ -33,6 +33,11 @@ class MermaidOptions:
     max_label_len: int = 80  # truncate long labels
     dedupe_titles: bool = False  # if True, include node_id in label to avoid confusing duplicates
 
+    include_leaves: bool = False
+    max_leaves_per_section: int = 10
+    leaf_types: Tuple[str, ...] = ("paragraph", "list", "code_fence", "table")
+    empty_leaf_types: Tuple[str, ...] = ("paragraph", "list")  # render as empty boxes
+
 
 def render_mermaid(
     atoms: List[Atom],
@@ -138,11 +143,138 @@ def render_mermaid(
     # Render Mermaid
     lines: List[str] = []
     lines.append("```mermaid")
+
+    # Optional layout tuning (some renderers honor this init block)
+    if cuts is not None:
+        lines.append('%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28}} }%%')
+
     lines.append(f"flowchart {opts.direction}")
 
-    # Nodes grouped into subgraphs
+    # Emit nodes (always flat; no subgraphs)
+    for nid in sorted(included_nodes):
+        if nid == 0:
+            lines.append('    ROOT["ROOT"]')
+            continue
+        atom_idx = node_atom.get(nid)
+        if atom_idx is None:
+            continue
+        lbl = label_for_node(nid, atom_idx)
+        lines.append(f'    S{nid}["{lbl}"]')
+
+    # Optional: emit leaf atoms (paragraph/list/code/table) under their local section node
+    if opts.include_leaves:
+        # Map user-facing strings -> AtomType
+        name_to_type = {
+            "paragraph": AtomType.PARAGRAPH,
+            "list": AtomType.LIST_BLOCK,
+            "code": AtomType.CODE_FENCE,
+            "code_fence": AtomType.CODE_FENCE,
+            "table": AtomType.TABLE,
+        }
+
+        leaf_atom_types = set()
+        for tname in opts.leaf_types:
+            at = name_to_type.get(tname.strip().lower())
+            if at is not None:
+                leaf_atom_types.add(at)
+
+        empty_leaf_atom_types = set()
+        for tname in opts.empty_leaf_types:
+            at = name_to_type.get(tname.strip().lower())
+            if at is not None:
+                empty_leaf_atom_types.add(at)
+
+        # Collect leaves under their *local* section (leaf.section_node_id)
+        leaves_by_section: Dict[int, List[int]] = {}
+        for a in atoms:
+            if a.atom_type not in leaf_atom_types:
+                continue
+            if a.section_node_id is None:
+                continue
+            # Only attach leaves to section nodes that exist in this diagram
+            if a.section_node_id not in included_nodes:
+                continue
+            # Skip blanks always
+            if a.atom_type == AtomType.BLANK:
+                continue
+            leaves_by_section.setdefault(a.section_node_id, []).append(a.idx)
+
+        # Leaf styles: empty boxes for paragraph/list
+        lines.append("classDef leafEmpty fill:#ffffff,stroke:#999,stroke-width:1px,color:#999;")
+        lines.append("classDef leafLabeled fill:#ffffff,stroke:#666,stroke-width:1px,color:#111;")
+
+        for sid, atom_indices in leaves_by_section.items():
+            # cap number of leaves per section
+            atom_indices = atom_indices[: opts.max_leaves_per_section]
+
+            for ai in atom_indices:
+                a = atoms[ai]
+                leaf_id = f"A{ai}"
+
+                if a.atom_type in empty_leaf_atom_types:
+                    # empty box
+                    lines.append(f'    {leaf_id}["·"]')
+                    lines.append(f"    S{sid} --> {leaf_id}")
+                    lines.append(f"    class {leaf_id} leafEmpty;")
+                else:
+                    # short label for code/table (avoid width explosion)
+                    if a.atom_type == AtomType.CODE_FENCE:
+                        lbl = "code"
+                    elif a.atom_type == AtomType.TABLE:
+                        lbl = "table"
+                    else:
+                        lbl = a.atom_type.value
+
+                    lines.append(f'    {leaf_id}["{lbl}"]')
+                    lines.append(f"    S{sid} --> {leaf_id}")
+                    lines.append(f"    class {leaf_id} leafLabeled;")
+
+            # If truncated, show overflow marker
+            total = len(leaves_by_section[sid])
+            if total > opts.max_leaves_per_section:
+                more_id = f"A{sid}_MORE"
+                lines.append(f'    {more_id}["… (+{total - opts.max_leaves_per_section})"]')
+                lines.append(f"    S{sid} --> {more_id}")
+                lines.append(f"    class {more_id} leafLabeled;")
+
+    # Emit edges
+    for p, c in sorted(edges):
+        pkey = f"S{p}" if p != 0 else "ROOT"
+        ckey = f"S{c}" if c != 0 else "ROOT"
+        lines.append(f"    {pkey} --> {ckey}")
+
+    # If cuts exist, color nodes by segment
     if cuts is not None:
-        # group nodes by segment
+        # Compute segment index per node (0-based)
+        node_to_seg: Dict[int, int] = {}
+        for nid, atom_idx in node_atom.items():
+            if nid == 0 or atom_idx < 0:
+                continue
+            node_to_seg[nid] = _segment_of_atom_idx(atom_idx, cuts)
+
+        n_segs = len(cuts) + 1
+
+        # A small palette of pleasant colors (background, stroke, text)
+        # If n_segs > palette size, we cycle.
+        palette = [
+            ("#E3F2FD", "#1E88E5", "#0D47A1"),  # blue
+            ("#E8F5E9", "#43A047", "#1B5E20"),  # green
+            ("#FFF3E0", "#FB8C00", "#E65100"),  # orange
+            ("#F3E5F5", "#8E24AA", "#4A148C"),  # purple
+            ("#FCE4EC", "#D81B60", "#880E4F"),  # pink
+            ("#E0F7FA", "#00ACC1", "#006064"),  # cyan
+            ("#F1F8E9", "#7CB342", "#33691E"),  # lime
+            ("#EFEBE9", "#6D4C41", "#3E2723"),  # brown
+        ]
+
+        # Define class styles
+        for s in range(n_segs):
+            fill, stroke, text = palette[s % len(palette)]
+            lines.append(
+                f"classDef sec{s+1} fill:{fill},stroke:{stroke},stroke-width:1px,color:{text};"
+            )
+
+        # Assign nodes to classes
         seg_to_nodes: Dict[int, List[int]] = {}
         for nid in sorted(included_nodes):
             if nid == 0:
@@ -150,30 +282,10 @@ def render_mermaid(
             seg = node_to_seg.get(nid, 0)
             seg_to_nodes.setdefault(seg, []).append(nid)
 
-        for seg_idx in sorted(seg_to_nodes):
-            lines.append(f'    subgraph SEC{seg_idx+1}["Section {seg_idx+1}"]')
-            for nid in seg_to_nodes[seg_idx]:
-                atom_idx = node_atom[nid]
-                lbl = label_for_node(nid, atom_idx)
-                lines.append(f'        S{nid}["{lbl}"]')
-            lines.append("    end")
-    else:
-        # original flat node emission
-        for nid in sorted(included_nodes):
-            if nid == 0:
-                lines.append('    ROOT["ROOT"]')
-                continue
-            atom_idx = node_atom.get(nid)
-            if atom_idx is None:
-                continue
-            lbl = label_for_node(nid, atom_idx)
-            lines.append(f'    S{nid}["{lbl}"]')
-
-    # Emit edges
-    for p, c in sorted(edges):
-        pkey = f"S{p}" if p != 0 else "ROOT"
-        ckey = f"S{c}" if c != 0 else "ROOT"
-        lines.append(f"    {pkey} --> {ckey}")
+        for seg, nids in sorted(seg_to_nodes.items()):
+            # Mermaid 'class' statement can take a comma-separated list
+            joined = ",".join(f"S{nid}" for nid in nids)
+            lines.append(f"class {joined} sec{seg+1};")
 
     lines.append("```")
     return "\n".join(lines)
