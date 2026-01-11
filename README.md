@@ -4,7 +4,7 @@ This project explores **how to divide a long document into N coherent sections**
 
 Rather than treating the problem as text generation, we treat it as **structured document analysis**.
 
-<img width="960" height="540" alt="doc-n-split-summary" src="https://github.com/user-attachments/assets/3ee7ecd1-0c6a-4fb0-94ff-3f472eab8a91" />
+<img width="2500" height="1406" alt="doc-n-split" src="https://github.com/user-attachments/assets/54a03e57-215c-4376-b578-53eb09900dca" />
 
 ## Motivation
 
