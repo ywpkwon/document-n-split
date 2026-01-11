@@ -4,7 +4,7 @@ This project explores **how to divide a long document into N coherent sections**
 
 Rather than treating the problem as text generation, we treat it as **structured document analysis**.
 
----
+<img width="960" height="540" alt="doc-n-split-summary" src="https://github.com/user-attachments/assets/3ee7ecd1-0c6a-4fb0-94ff-3f472eab8a91" />
 
 ## Motivation
 
@@ -79,8 +79,6 @@ Visualization serves two purposes:
 - **debugging** (why did this split happen?)
 - **future interaction** (manual tweaking, UI-based adjustment)
 
----
-
 ## High-level pipeline
 
 ~~~
@@ -114,7 +112,7 @@ This representation is intentionally **over-complete** to support future policie
 
 > Think of atoms as “document pixels”: small, immutable, and composable.
 
----
+<img width="840" height="652" alt="Screenshot 2026-01-11 at 1 44 10 AM" src="https://github.com/user-attachments/assets/0888fb96-a87e-41bf-9aec-d6c00f9e9716" />
 
 ## Splitting into N sections
 
@@ -138,7 +136,36 @@ This makes the behavior:
 - tunable
 - extensible
 
----
+The final output looks like the following:
+```json
+{
+  "N": 5,
+  "objective": [0, 91, 0.0],
+  "cuts": [13, 30, 40, 54],
+  "segments": [
+    {
+      "seg_idx": 0,
+      "start_atom": 0,
+      "end_atom_excl": 13,
+      "words": 65,
+      "start_path_ids": [1],
+      "start_path_titles": ["Project Atlas: Strategy Memo"]
+    },
+    {
+      "seg_idx": 1,
+      "start_atom": 13,
+      "end_atom_excl": 30,
+      "words": 80,
+      "start_path_ids": [1,2,4],
+      "start_path_titles": [
+        "Project Atlas: Strategy Memo",
+        "1. Executive Summary",
+        "1.1 Success Metrics"
+      ]
+    },
+    ...
+}
+```
 
 ## Visualization (Mermaid)
 
@@ -150,40 +177,68 @@ The system can emit a **Mermaid flowchart** showing:
 
 This is especially useful when tuning split parameters or validating parser behavior.
 
-### Example (section-level)
-
+### Example 
+Here is the example Mermaid output. For a terminal command to generate, please refer to the Usage #3 below.
+The source document can be found [here](...).
 ~~~mermaid
+%%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28}} }%%
 flowchart TD
-    S1["Introduction"]
-    S2["Background"]
-    S3["Method"]
+classDef sec1 fill:#E3F2FD,stroke:#1E88E5,stroke-width:1px,color:#0D47A1;
+classDef sec2 fill:#E8F5E9,stroke:#43A047,stroke-width:1px,color:#1B5E20;
+classDef sec3 fill:#FFF3E0,stroke:#FB8C00,stroke-width:1px,color:#E65100;
+classDef leafEmpty stroke-width:1px;
+classDef leafLabeled stroke-width:1px;
+    S1["Mini Example: Deterministic N-Split Demo"]
+    S2["1. Background"]
+    S3["Constraints"]
+    S4["2. Method"]
+class S1 sec1;
+class S2,S3 sec2;
+class S4 sec3;
+    A2["P"]
+    S1 --> A2
+    class A2 leafLabeled;
+    class A2 sec1;
+    A8["P"]
+    S2 --> A8
+    class A8 leafLabeled;
+    class A8 sec2;
+    A11["L"]
+    S3 --> A11
+    class A11 leafLabeled;
+    class A11 sec2;
+    A17["P"]
+    S4 --> A17
+    class A17 leafLabeled;
+    class A17 sec3;
+    A19["C"]
+    S4 --> A19
+    class A19 leafLabeled;
+    class A19 sec3;
     S1 --> S2
+    S1 --> S4
     S2 --> S3
 ~~~
 
----
-
 ## Usage
 
-### Parse and inspect atoms
-~~~
+1. Parse and inspect atoms
+~~~bash
 python main.py --file input.md
 ~~~
 
-### Split into N sections
-~~~
+2. Split into N sections
+```bash
 python main.py --file input.md --split 5
-~~~
+```
 
-### Export Mermaid diagram
-~~~
+3. Export Mermaid diagram
+~~~bash
 python main.py --file input.md \
   --split 5 \
   --mermaid-out structure.md \
   --mermaid-leaves
 ~~~
-
----
 
 ## Summary
 
