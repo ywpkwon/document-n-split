@@ -281,7 +281,7 @@ This generates a Mermaid diagram showing:
 - Section coloring (when splits are enabled)
 
 > You can render the `.mmd` file using the Mermaid CLI (for example,  
-> `npx -y -p @mermaid-js/mermaid-cli@10 mmdc -i xx.mmd -o xx.png -s 3`),  
+> `npx -y -p @mermaid-js/mermaid-cli@10 mmdc -i out.mmd -o out.png -s 3`),  
 > compatible Markdown renderers, or free online Mermaid editors such as  
 > https://www.mermaidflow.app/editor.
 
