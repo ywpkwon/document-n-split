@@ -1,9 +1,25 @@
 import json
 import argparse
 from pathlib import Path
+from typing import List
+
 from atomizer import detect_mode, atomize
 from render import render_mermaid, MermaidOptions
 from partition import build_cut_candidates, partition_into_n
+
+
+def materialize_sections_from_atoms(atoms, cuts: List[int]) -> List[str]:
+    """
+    cuts: start atom indices for sections 2..N (sorted)
+    returns: list[str] length N where ''.join(sections) == original document
+    """
+    M = len(atoms)
+    starts = [0] + list(cuts)
+    ends = list(cuts) + [M]
+    out: List[str] = []
+    for s, e in zip(starts, ends):
+        out.append("".join(a.text for a in atoms[s:e]))
+    return out
 
 
 def _preview(text: str, n: int = 50) -> str:
@@ -73,6 +89,10 @@ def main():
                     help="Do not use horizontal rules (---) as cut candidates.")
     ap.add_argument("--split-json-out", type=str, default=None,
                     help="Write split result (cuts + segments) to JSON.")
+    ap.add_argument("--split-json-mode", type=str, default="plan", choices=["plan", "sections"],
+                    help="JSON output mode: "
+                         "'plan' writes indices/stats (default), "
+                         "'sections' writes materialized section texts.")
     args = ap.parse_args()
 
     if not args.file and not args.text:
@@ -138,22 +158,32 @@ def main():
         _print_split(res)
 
         if args.split_json_out:
-            payload = {
-                "N": N,
-                "objective": list(res.objective),
-                "cuts": res.cuts,
-                "segments": [
-                    {
-                        "seg_idx": s.seg_idx,
-                        "start_atom": s.start_atom,
-                        "end_atom_excl": s.end_atom_excl,
-                        "words": s.words,
-                        "start_path_ids": list(s.start_path_ids),
-                        "start_path_titles": list(s.start_path_titles),
-                    }
-                    for s in res.segments
-                ],
-            }
+            if args.split_json_mode == "plan":
+                payload = {
+                    "mode": "plan",
+                    "N": N,
+                    "objective": list(res.objective),
+                    "cuts": res.cuts,
+                    "segments": [
+                        {
+                            "seg_idx": s.seg_idx,
+                            "start_atom": s.start_atom,
+                            "end_atom_excl": s.end_atom_excl,
+                            "words": s.words,
+                            "start_path_ids": list(s.start_path_ids),
+                            "start_path_titles": list(s.start_path_titles),
+                        }
+                        for s in res.segments
+                    ],
+                }
+            else:
+                sections = materialize_sections_from_atoms(atoms, res.cuts)
+                payload = {
+                    "mode": "sections",
+                    "N": N,
+                    "cuts": res.cuts,
+                    "sections": sections,
+                }
             Path(args.split_json_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
             print(f"\nWrote split JSON to: {args.split_json_out}")
     

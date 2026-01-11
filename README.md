@@ -95,8 +95,6 @@ N-way partitioning (by word balance)
 Optional visualization
 ~~~
 
----
-
 ## Atomization
 
 The parser detects document mode (Markdown vs plain text) and emits a **linear sequence of atoms**.
@@ -179,7 +177,7 @@ This is especially useful when tuning split parameters or validating parser beha
 
 ### Example 
 Here is the example Mermaid output. For a terminal command to generate, please refer to the Usage #3 below.
-The source document can be found [here](...).
+The source document can be found [here](./examples/example_minimal.md).
 ~~~mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28}} }%%
 flowchart TD
@@ -222,23 +220,72 @@ class S4 sec3;
 
 ## Usage
 
-1. Parse and inspect atoms
+### 1. Parse and inspect atoms
+
+Parse a document into atomic units (headings, paragraphs, lists, code blocks, etc.) and print a structured inspection table. This is useful for understanding how the document is interpreted internally before performing any split.
+
 ~~~bash
-python main.py --file input.md
+python run_atomizer.py --file ./examples/example_mistral.md
 ~~~
 
-2. Split into N sections
+### 2. Split into N sections
+
+Split the document into *N* sections using the deterministic split algorithm:
+
 ```bash
-python main.py --file input.md --split 5
+python run_atomizer.py --file ./examples/example_mistral.md --split 3 --split-json-out out.json
 ```
 
-3. Export Mermaid diagram
+By default, `--split-json-mode` is `plan`. In this mode, `out.json` contains **metadata only**, including cut indices, word counts, and section boundaries.
+
+If you want **materialized text sections** (a list of strings whose concatenation exactly reconstructs the original document), use `--split-json-mode sections`:
+
+```bash
+python run_atomizer.py \
+  --file ./examples/example_mistral.md \
+  --split 3 \
+  --split-json-mode sections \
+  --split-json-out out.json
+```
+
+Example output:
+
+```json
+{
+  "mode": "sections",
+  "N": 3,
+  "cuts": [25, 40],
+  "sections": [
+    "…exact original text for section 1…",
+    "…exact original text for section 2…",
+    "…exact original text for section 3…"
+  ]
+}
+```
+
+### 3. Export Mermaid diagram
+
+Visualize the inferred document structure and section boundaries using Mermaid:
+
 ~~~bash
-python main.py --file input.md \
+python run_atomizer.py \
+  --file ./examples/example_mistral.md \
   --split 5 \
-  --mermaid-out structure.md \
+  --mermaid-out example_mistral.mmd \
   --mermaid-leaves
 ~~~
+
+This generates a Mermaid diagram showing:
+- Section hierarchy
+- Optional leaf nodes (paragraphs, lists, code blocks)
+- Section coloring (when splits are enabled)
+
+> You can render the `.mmd` file using the Mermaid CLI (for example,  
+> `npx -y -p @mermaid-js/mermaid-cli@10 mmdc -i xx.mmd -o xx.png -s 3`),  
+> compatible Markdown renderers, or free online Mermaid editors such as  
+> https://www.mermaidflow.app/editor.
+
+> When using `npx`, for high-resolution exports (e.g., for papers or slides), increase the scale factor using `-s`.
 
 ## Summary
 
