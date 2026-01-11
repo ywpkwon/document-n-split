@@ -31,6 +31,9 @@ This makes the system:
 - predictable
 - debuggable
 - suitable for automation pipelines
+- cost-efficient (no token/inference/hardware cost)
+
+> If needed, we can add LLMs *after* segmentation for optional refinement—e.g., improving inter-segment relationships, ranking split candidates, or tuning split thresholds.
 
 #### 2. Atom-first representation
 Instead of directly “splitting a document,” we first parse it into **atomic units**:
