@@ -179,8 +179,8 @@ The system can emit a **Mermaid flowchart** showing:
 This is especially useful when tuning split parameters or validating parser behavior.
 
 ### Example 
-Here is the example Mermaid output. For a terminal command to generate, please refer to the Usage #3 below.
-The source document can be found [here](./examples/example_minimal.md).
+Below is an example Mermaid output. For the terminal command to generate the diagram, see **Usage (3)**. The source document is available at [./examples/example_minimal.md](./examples/example_minimal.md), and it is split into **N=3** parts. The diagram includes heading nodes and leaf nodes (paragraph, list, code block, table). Colors represent split groups.
+
 ~~~mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28}} }%%
 flowchart TD
@@ -220,6 +220,8 @@ class S4 sec3;
     S1 --> S4
     S2 --> S3
 ~~~
+
+> In leaf nodes, `P=paragraph, L=list, C=code, T=table`
 
 ## Usage
 
