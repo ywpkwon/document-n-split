@@ -34,7 +34,7 @@ This makes the system:
 - suitable for automation pipelines
 - cost-efficient (no token/inference/hardware cost)
 
-> If needed, we can add LLMs *after* segmentation for optional refinement—e.g., improving inter-segment relationships, ranking split candidates, or tuning split thresholds.
+> If needed, we can add LLMs *after* segmentation for optional refinement: e.g., improving inter-segment relationships, ranking split candidates, or tuning split thresholds.
 
 #### 2. Atom-first representation
 Instead of directly “splitting a document,” we first parse it into **atomic units**:
@@ -180,7 +180,7 @@ The system can emit a **Mermaid flowchart** showing:
 This is especially useful when tuning split parameters or validating parser behavior.
 
 ### Example 
-Below is an example Mermaid output. For the terminal command to generate the diagram, see **Usage (3)**. The source document is available at [./examples/example_minimal.md](./examples/example_minimal.md), and it is split into **N=3** parts. The diagram includes heading nodes and leaf nodes (paragraph, list, code block, table). Colors represent split groups.
+Below is an example Mermaid output. For the terminal command to generate the diagram, see the **Usage #3** section below. The source document is available at [./examples/example_minimal.md](./examples/example_minimal.md), and it is split into **N=3** parts. The diagram includes heading nodes and leaf nodes (paragraph, list, code block, table). Colors represent split groups.
 
 ~~~mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 28}} }%%
@@ -295,7 +295,7 @@ This generates a Mermaid diagram showing:
 
 ## Summary
 
-- Document segmentation is ambiguous — so we made it explicit.
+- Document segmentation is ambiguous, so we made it explicit.
 - We avoid LLMs where generation is unnecessary.
 - We parse once, then reason over atoms.
 - Visualization is not an afterthought; it’s part of the design.
